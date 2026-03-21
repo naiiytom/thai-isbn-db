@@ -1,26 +1,34 @@
 """
-NaiinClient — fetches book cover images (and supplementary metadata) from
-the Naiin internal JSON API.
+NaiinClient — fetches book cover images from www.naiin.com via HTML scraping.
 
-Endpoint: https://api.naiin.com/products?q={isbn}
+The internal api.naiin.com endpoint blocks unauthenticated requests, so we
+scrape the public website instead:
 
-The API returns a JSON array of product objects.  We take the first result
-whose ISBN matches and extract the cover image URL.
+  1. Search: GET https://www.naiin.com/search?keyword={isbn}
+     - Parse the first product link from the search results.
+  2. Detail: GET https://www.naiin.com/product/{slug}
+     - Extract the cover URL from <meta property="og:image">.
+
+If the search page already contains the og:image for the first result (some
+sites embed it in the listing), we skip the detail fetch.
 """
 
 import logging
+import re
 import time
 from dataclasses import dataclass
 from typing import Optional
 
 import requests
+from bs4 import BeautifulSoup
 
 from app.config import REQUEST_TIMEOUT, REQUEST_RETRIES, RATE_LIMIT_DELAY
 from app.utils.isbn_formatter import IsbnFormatter
 
 logger = logging.getLogger(__name__)
 
-NAIIN_API_URL = "https://api.naiin.com/products"
+NAIIN_BASE_URL = "https://www.naiin.com"
+NAIIN_SEARCH_URL = f"{NAIIN_BASE_URL}/search"
 
 _HEADERS = {
     "User-Agent": (
@@ -28,22 +36,13 @@ _HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/124.0.0.0 Safari/537.36"
     ),
-    "Accept": "application/json, text/plain, */*",
-    "Referer": "https://www.naiin.com/",
-    "Origin": "https://www.naiin.com",
+    "Accept-Language": "th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Referer": NAIIN_BASE_URL,
 }
 
-# Candidate keys for cover image URL in the Naiin product JSON
-_IMAGE_KEY_CANDIDATES = [
-    "image_url",
-    "imageUrl",
-    "cover_image",
-    "coverImage",
-    "img",
-    "image",
-    "photo",
-    "thumbnail",
-]
+# Matches product detail paths like /product/... or /book/...
+_PRODUCT_PATH_RE = re.compile(r"/(product|book|item)/[^\"'\s]+", re.IGNORECASE)
 
 
 @dataclass
@@ -54,7 +53,7 @@ class NaiinBookData:
 
 
 class NaiinClient:
-    """Queries the Naiin API for book cover images."""
+    """Scrapes www.naiin.com for book cover images."""
 
     def __init__(
         self,
@@ -75,12 +74,35 @@ class NaiinClient:
     def fetch(self, isbn: str) -> Optional[NaiinBookData]:
         """Return cover URL (and optional supplementary fields) for *isbn*."""
         digits = IsbnFormatter.strip(isbn)
-        data = self._get_json(digits)
-        if not data:
+
+        search_html = self._get(NAIIN_SEARCH_URL, params={"keyword": digits})
+        if search_html is None:
             return None
 
-        products = data if isinstance(data, list) else data.get("products", [data])
-        return self._extract(products, digits)
+        # Fast path: og:image embedded in the search results page
+        cover_url = self._parse_og_image(search_html)
+        title, description = self._parse_og_title_desc(search_html)
+        if cover_url:
+            return NaiinBookData(
+                cover_url=cover_url, title=title, description=description
+            )
+
+        # Slow path: follow first product link to the detail page
+        product_url = self._parse_first_product_url(search_html)
+        if not product_url:
+            logger.info("Naiin: no product link found for ISBN %s", digits)
+            return None
+
+        time.sleep(self.rate_limit_delay)
+        detail_html = self._get(product_url)
+        if detail_html is None:
+            return None
+
+        cover_url = self._parse_og_image(detail_html)
+        title, description = self._parse_og_title_desc(detail_html)
+        return NaiinBookData(
+            cover_url=cover_url, title=title, description=description
+        )
 
     def fetch_cover(self, isbn: str) -> Optional[str]:
         """Convenience method — returns just the cover URL or None."""
@@ -88,93 +110,57 @@ class NaiinClient:
         return result.cover_url if result else None
 
     # ------------------------------------------------------------------
-    # Parsing
+    # Parsing helpers
     # ------------------------------------------------------------------
-
-    def _extract(self, products: list, isbn_digits: str) -> Optional[NaiinBookData]:
-        for product in products:
-            if not isinstance(product, dict):
-                continue
-            # Prefer the product whose ISBN matches
-            if not self._isbn_matches(product, isbn_digits):
-                continue
-            return self._build(product)
-
-        # If no exact match, take the first product (query was ISBN-specific)
-        if products and isinstance(products[0], dict):
-            return self._build(products[0])
-        return None
-
-    def _build(self, product: dict) -> NaiinBookData:
-        cover_url = None
-        for key in _IMAGE_KEY_CANDIDATES:
-            val = product.get(key) or product.get(key.upper())
-            if val and isinstance(val, str) and val.startswith("http"):
-                cover_url = val
-                break
-
-        # Try nested image objects
-        if not cover_url:
-            for key in ("images", "media"):
-                nested = product.get(key)
-                if isinstance(nested, list) and nested:
-                    first = nested[0]
-                    if isinstance(first, dict):
-                        for img_key in _IMAGE_KEY_CANDIDATES:
-                            val = first.get(img_key)
-                            if val and isinstance(val, str) and val.startswith("http"):
-                                cover_url = val
-                                break
-                elif isinstance(nested, dict):
-                    for img_key in _IMAGE_KEY_CANDIDATES:
-                        val = nested.get(img_key)
-                        if val and isinstance(val, str) and val.startswith("http"):
-                            cover_url = val
-                            break
-
-        title = (
-            product.get("title")
-            or product.get("name")
-            or product.get("book_title")
-        )
-        description = product.get("description") or product.get("detail")
-
-        return NaiinBookData(
-            cover_url=cover_url,
-            title=str(title).strip() if title else None,
-            description=str(description).strip() if description else None,
-        )
 
     @staticmethod
-    def _isbn_matches(product: dict, isbn_digits: str) -> bool:
-        for key in ("isbn", "isbn13", "ISBN", "isbn_13", "barcode", "ean"):
-            val = product.get(key)
-            if val and IsbnFormatter.strip(str(val)) == isbn_digits:
-                return True
-        return False
+    def _parse_og_image(html: str) -> Optional[str]:
+        soup = BeautifulSoup(html, "lxml")
+        tag = soup.find("meta", property="og:image")
+        if tag and tag.get("content"):
+            url = tag["content"].strip()
+            if url.startswith("http"):
+                return url
+        return None
+
+    @staticmethod
+    def _parse_og_title_desc(html: str) -> tuple[Optional[str], Optional[str]]:
+        soup = BeautifulSoup(html, "lxml")
+        title_tag = soup.find("meta", property="og:title")
+        desc_tag = soup.find("meta", property="og:description")
+        title = title_tag["content"].strip() if title_tag and title_tag.get("content") else None
+        desc = desc_tag["content"].strip() if desc_tag and desc_tag.get("content") else None
+        return title, desc
+
+    def _parse_first_product_url(self, html: str) -> Optional[str]:
+        """Extract the absolute URL of the first product in search results."""
+        soup = BeautifulSoup(html, "lxml")
+        for tag in soup.find_all("a", href=_PRODUCT_PATH_RE):
+            href = tag["href"].strip()
+            if href.startswith("http"):
+                return href
+            return NAIIN_BASE_URL + href
+        return None
 
     # ------------------------------------------------------------------
-    # HTTP helper
+    # HTTP helper with retry + exponential back-off
     # ------------------------------------------------------------------
 
-    def _get_json(self, isbn_digits: str) -> Optional[object]:
-        params = {"q": isbn_digits}
+    def _get(self, url: str, params: Optional[dict] = None) -> Optional[str]:
         delay = 1.0
         for attempt in range(1, self.retries + 1):
             try:
                 resp = self.session.get(
-                    NAIIN_API_URL, params=params, timeout=self.timeout
+                    url, params=params, timeout=self.timeout, allow_redirects=True
                 )
+                resp.encoding = "utf-8"
                 if resp.status_code == 200:
-                    return resp.json()
+                    return resp.text
                 logger.warning(
                     "Naiin GET %s → HTTP %s (attempt %d/%d)",
-                    NAIIN_API_URL,
-                    resp.status_code,
-                    attempt,
-                    self.retries,
+                    url, resp.status_code, attempt, self.retries,
                 )
-            except (requests.RequestException, ValueError) as exc:
+            except requests.RequestException as exc:
                 logger.warning(
                     "Naiin GET failed (attempt %d/%d): %s", attempt, self.retries, exc
                 )
