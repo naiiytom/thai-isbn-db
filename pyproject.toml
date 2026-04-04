@@ -1,0 +1,33 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "thai-isbn-db"
+version = "0.1.0"
+description = "Fetch and store Thai book metadata by ISBN"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.31.0",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=4.9.0",
+    "pymongo>=4.6.0",
+    "python-dotenv>=1.0.0",
+    "isbnlib>=3.10.0",
+]
+
+[project.scripts]
+thai-isbn = "app.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=7.4.0",
+    "responses>=0.23.0",
+    "mongomock>=4.1.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+[tool.uv]
+default-groups = ["dev"]
