@@ -41,8 +41,8 @@ _HEADERS = {
     "Referer": NAIIN_BASE_URL,
 }
 
-# Matches product detail paths like /product/... or /book/...
-_PRODUCT_PATH_RE = re.compile(r"/(product|book|item)/[^\"'\s]+", re.IGNORECASE)
+# Matches product detail paths like /product/..., /book/..., /item/..., or /p/...
+_PRODUCT_PATH_RE = re.compile(r"/(product|book|item|p)/[^\"'\s]+", re.IGNORECASE)
 
 
 @dataclass
@@ -116,11 +116,25 @@ class NaiinClient:
     @staticmethod
     def _parse_og_image(html: str) -> Optional[str]:
         soup = BeautifulSoup(html, "lxml")
+
+        # Primary: og:image
         tag = soup.find("meta", property="og:image")
         if tag and tag.get("content"):
             url = tag["content"].strip()
             if url.startswith("http"):
                 return url
+            if url.startswith("//"):
+                return "https:" + url
+
+        # Secondary: twitter:image
+        tw_tag = soup.find("meta", attrs={"name": "twitter:image"})
+        if tw_tag and tw_tag.get("content"):
+            url = tw_tag["content"].strip()
+            if url.startswith("http"):
+                return url
+            if url.startswith("//"):
+                return "https:" + url
+
         return None
 
     @staticmethod

@@ -76,6 +76,8 @@ class SeedScraper:
             url = og_tag["content"].strip()
             if url.startswith("http"):
                 return url
+            if url.startswith("//"):
+                return "https:" + url
 
         # Fallback: twitter:image
         tw_tag = soup.find("meta", attrs={"name": "twitter:image"})
@@ -83,6 +85,8 @@ class SeedScraper:
             url = tw_tag["content"].strip()
             if url.startswith("http"):
                 return url
+            if url.startswith("//"):
+                return "https:" + url
 
         # Fallback: first product image found in the page
         for img in soup.find_all("img", src=True):

@@ -114,10 +114,17 @@ class NltClient:
                 return int(match.group(1))
 
         # Strategy B: the page itself might be the detail page (direct redirect)
-        # Check for a canonical or og:url meta tag
+        # Check for a canonical link tag
         canonical = soup.find("link", rel="canonical")
         if canonical and canonical.get("href"):
             match = pattern.search(canonical["href"])
+            if match:
+                return int(match.group(1))
+
+        # Strategy D: og:url meta tag (same intent as canonical link)
+        og_url = soup.find("meta", property="og:url")
+        if og_url and og_url.get("content"):
+            match = pattern.search(og_url["content"])
             if match:
                 return int(match.group(1))
 
@@ -170,19 +177,23 @@ class NltClient:
         # Build a label→value map from <dt>/<dd> pairs or two-column <tr> rows.
         label_map: dict[str, str] = {}
 
+        def _clean(text: str) -> str:
+            """Collapse internal whitespace/newlines to a single space."""
+            return " ".join(text.split())
+
         # Try <dl> / <dt> + <dd>
         for dt in soup.find_all("dt"):
-            label = dt.get_text(separator=" ", strip=True)
+            label = _clean(dt.get_text(separator=" ", strip=True))
             dd = dt.find_next_sibling("dd")
             if dd:
-                label_map[label] = dd.get_text(separator=" ", strip=True)
+                label_map[label] = _clean(dd.get_text(separator=" ", strip=True))
 
         # Try two-column table rows
         for tr in soup.find_all("tr"):
             cells = tr.find_all(["th", "td"])
             if len(cells) >= 2:
-                label = cells[0].get_text(separator=" ", strip=True)
-                value = cells[1].get_text(separator=" ", strip=True)
+                label = _clean(cells[0].get_text(separator=" ", strip=True))
+                value = _clean(cells[1].get_text(separator=" ", strip=True))
                 if label:
                     label_map[label] = value
 
@@ -190,8 +201,8 @@ class NltClient:
         for label_el in soup.find_all(class_=re.compile(r"label|field-label", re.I)):
             value_el = label_el.find_next_sibling()
             if value_el:
-                label_map[label_el.get_text(strip=True)] = value_el.get_text(
-                    separator=" ", strip=True
+                label_map[_clean(label_el.get_text(strip=True))] = _clean(
+                    value_el.get_text(separator=" ", strip=True)
                 )
 
         # Map Thai labels to fields
