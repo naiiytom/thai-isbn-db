@@ -85,7 +85,7 @@ class Orchestrator:
         if nlt_meta and (nlt_meta.title or nlt_meta.author):
             logger.info("Text metadata sourced from NLT for %s", hyphenated_isbn)
             return BookDocument(
-                isbn=hyphenated_isbn,
+                isbn=digits,
                 title=nlt_meta.title,
                 author=nlt_meta.author,
                 publisher=nlt_meta.publisher,
@@ -97,7 +97,7 @@ class Orchestrator:
             "NLT returned no metadata for %s — no further fallback configured",
             hyphenated_isbn,
         )
-        return BookDocument(isbn=hyphenated_isbn, source=None)
+        return BookDocument(isbn=digits, source=None)
 
     # ------------------------------------------------------------------
     # Step 2: cover image

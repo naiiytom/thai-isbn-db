@@ -71,11 +71,11 @@ def cmd_show(args):
         sys.exit(1)
 
     from app.utils.isbn_formatter import IsbnFormatter
-    hyphenated = IsbnFormatter.format(args.isbn)
+    digits = IsbnFormatter.strip(args.isbn)
 
-    doc = collection.find_one({"_id": hyphenated})
+    doc = collection.find_one({"_id": digits})
     if doc is None:
-        print(f"No record found for ISBN: {hyphenated}")
+        print(f"No record found for ISBN: {digits}")
         sys.exit(1)
 
     doc["isbn"] = doc.pop("_id")

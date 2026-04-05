@@ -54,7 +54,7 @@ class TestOrchestratorTextMetadata:
         seed = MagicMock(); seed.fetch_cover.return_value = None
         orch = Orchestrator(nlt_client=nlt, naiin_client=naiin, seed_scraper=seed)
         book = orch.fetch_book("9786161842714")
-        assert book.isbn == "978-616-18-4271-4"  # still returns a document
+        assert book.isbn == "9786161842714"  # still returns a document
         assert book.title is None
 
 
@@ -102,15 +102,15 @@ class TestOrchestratorIsbn:
         seed = MagicMock(); seed.fetch_cover.return_value = None
         return Orchestrator(nlt_client=nlt, naiin_client=naiin, seed_scraper=seed)
 
-    def test_isbn_is_hyphenated_in_result(self):
+    def test_isbn_stored_as_digits(self):
         orch = self._make()
         book = orch.fetch_book("9786161842714")
-        assert book.isbn == "978-616-18-4271-4"
+        assert book.isbn == "9786161842714"
 
-    def test_already_hyphenated_isbn_accepted(self):
+    def test_hyphenated_isbn_input_stripped_to_digits(self):
         orch = self._make()
         book = orch.fetch_book("978-616-18-4271-4")
-        assert book.isbn == "978-616-18-4271-4"
+        assert book.isbn == "9786161842714"
 
 
 class TestOrchestratorPersistence:
