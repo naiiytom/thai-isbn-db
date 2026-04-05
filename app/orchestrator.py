@@ -3,9 +3,9 @@ Orchestrator — executes the Hybrid Metadata Strategy.
 
 Resolution order
 ----------------
-Text metadata:
+Text metadata (source field):
   1. NLT e-service scraper (NltClient)  — primary, Thailand-specific
-  2. (extensible: add ISBNdb/Google Books here if needed later)
+  2. (extensible: add additional scrapers here if needed later)
 
 Cover image:
   1. Naiin JSON API (NaiinClient)        — primary, high-res
@@ -90,14 +90,14 @@ class Orchestrator:
                 author=nlt_meta.author,
                 publisher=nlt_meta.publisher,
                 page_count=nlt_meta.page_count,
-                metadata_source="nlt",
+                source="nlt",
             )
 
         logger.info(
             "NLT returned no metadata for %s — no further fallback configured",
             hyphenated_isbn,
         )
-        return BookDocument(isbn=hyphenated_isbn, metadata_source=None)
+        return BookDocument(isbn=hyphenated_isbn, source=None)
 
     # ------------------------------------------------------------------
     # Step 2: cover image

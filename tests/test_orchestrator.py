@@ -34,18 +34,18 @@ class TestOrchestratorTextMetadata:
         assert book.author == "NLT Author"
         assert book.publisher == "NLT Pub"
         assert book.page_count == 200
-        assert book.metadata_source == "nlt"
+        assert book.source == "nlt"
 
     def test_nlt_failure_produces_empty_metadata(self):
         orch, *_ = self._make(nlt_return=None)
         book = orch.fetch_book("9786161842714")
         assert book.title is None
-        assert book.metadata_source is None
+        assert book.source is None
 
     def test_nlt_empty_title_treated_as_failure(self):
         orch, *_ = self._make(nlt_return=NltBookMetadata(title=None, author=None))
         book = orch.fetch_book("9786161842714")
-        assert book.metadata_source is None
+        assert book.source is None
 
     def test_nlt_exception_is_caught(self):
         nlt = MagicMock()

@@ -17,10 +17,10 @@ class BookDocument:
     author: Optional[str] = None
     publisher: Optional[str] = None
     page_count: Optional[int] = None
-    description: Optional[str] = None
+    synopsis: Optional[str] = None
     cover_url: Optional[str] = None
-    metadata_source: Optional[str] = None   # "nlt", "isbndb", etc.
-    cover_source: Optional[str] = None      # "naiin", "seed", etc.
+    source: Optional[str] = None         # "nlt", "bulk", etc.
+    cover_source: Optional[str] = None   # "naiin", "seed", etc.
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
