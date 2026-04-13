@@ -64,23 +64,23 @@ cp .env.example .env
 
 ```bash
 # Fetch a single ISBN (stores result in MongoDB)
-python main.py fetch 9786161842714
+python main.py fetch 9786161842710
 
 # Fetch without persisting to MongoDB
-python main.py fetch --no-db 9786161842714
+python main.py fetch --no-db 9786161842710
 
 # Batch fetch from a file (one ISBN per line)
 python main.py fetch --batch isbn_list.txt
 
 # Show a stored record
-python main.py show 9786161842714
+python main.py show 9786161842710
 ```
 
 ### Example output
 
 ```json
 {
-  "isbn": "978-616-18-4271-4",
+  "isbn": "978-616-18-4271-0",
   "title": "...",
   "author": "...",
   "publisher": "...",
@@ -122,13 +122,13 @@ thai-isbn-db/
 
 ## ISBN Formatter
 
-The `IsbnFormatter` utility converts raw 13-digit ISBNs to the hyphenated format required by the NLT (`978-616-18-4271-4`).  It uses the Thai ISBN Agency's publisher-group ranges for `978-616` prefixed ISBNs and delegates to `isbnlib` for other prefixes.
+The `IsbnFormatter` utility converts raw 13-digit ISBNs to the hyphenated format required by the NLT (`978-616-18-4271-0`).  It uses the Thai ISBN Agency's publisher-group ranges for `978-616` prefixed ISBNs and delegates to `isbnlib` for other prefixes.
 
 ```python
 from app.utils.isbn_formatter import IsbnFormatter
 
-IsbnFormatter.format("9786161842714")     # → "978-616-18-4271-4"
-IsbnFormatter.strip("978-616-18-4271-4")  # → "9786161842714"
+IsbnFormatter.format("9786161842710")     # → "978-616-18-4271-0"
+IsbnFormatter.strip("978-616-18-4271-0")  # → "9786161842710"
 ```
 
 ## Running Tests

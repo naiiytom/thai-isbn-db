@@ -23,6 +23,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from app.config import REQUEST_TIMEOUT, REQUEST_RETRIES, RATE_LIMIT_DELAY
+from app.utils.http_client import RobustHttpMixin
 from app.utils.isbn_formatter import IsbnFormatter
 
 logger = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ class NaiinBookData:
     description: Optional[str] = None
 
 
-class NaiinClient:
+class NaiinClient(RobustHttpMixin):
     """Scrapes www.naiin.com for book cover images."""
 
     def __init__(
@@ -156,29 +157,4 @@ class NaiinClient:
             return NAIIN_BASE_URL + href
         return None
 
-    # ------------------------------------------------------------------
-    # HTTP helper with retry + exponential back-off
-    # ------------------------------------------------------------------
-
-    def _get(self, url: str, params: Optional[dict] = None) -> Optional[str]:
-        delay = 1.0
-        for attempt in range(1, self.retries + 1):
-            try:
-                resp = self.session.get(
-                    url, params=params, timeout=self.timeout, allow_redirects=True
-                )
-                resp.encoding = "utf-8"
-                if resp.status_code == 200:
-                    return resp.text
-                logger.warning(
-                    "Naiin GET %s → HTTP %s (attempt %d/%d)",
-                    url, resp.status_code, attempt, self.retries,
-                )
-            except requests.RequestException as exc:
-                logger.warning(
-                    "Naiin GET failed (attempt %d/%d): %s", attempt, self.retries, exc
-                )
-            if attempt < self.retries:
-                time.sleep(delay)
-                delay *= 2
-        return None
+    # _get() is provided by RobustHttpMixin
