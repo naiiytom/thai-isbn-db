@@ -13,6 +13,8 @@ Usage via python:
 import argparse
 import json
 import logging
+import pathlib
+import shutil
 import sys
 from dataclasses import asdict
 
@@ -21,6 +23,16 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _bootstrap_env() -> None:
+    """Copy .env.example → .env if .env does not yet exist."""
+    root = pathlib.Path(__file__).parent.parent
+    env_file = root / ".env"
+    example_file = root / ".env.example"
+    if not env_file.exists() and example_file.exists():
+        shutil.copy(example_file, env_file)
+        logger.info("Created .env from .env.example — edit it before running.")
 
 
 def _get_collection():
@@ -35,6 +47,7 @@ def _get_collection():
 
 def cmd_fetch(args):
     from app.orchestrator import Orchestrator
+    from app.utils.isbn_formatter import IsbnFormatter
 
     collection = None if args.no_db else _get_collection()
     orch = Orchestrator(db_collection=collection)
@@ -50,16 +63,47 @@ def cmd_fetch(args):
     else:
         isbns = [args.isbn]
 
+    total = len(isbns)
+    succeeded = 0
+    failed = 0
+    skipped = 0
     results = []
-    for isbn in isbns:
-        logger.info("Fetching ISBN: %s", isbn)
+
+    for idx, isbn in enumerate(isbns, start=1):
+        # --skip-existing: check MongoDB before fetching
+        if args.skip_existing and collection is not None:
+            digits = IsbnFormatter.strip(isbn)
+            if collection.find_one({"_id": digits}, projection={"_id": 1}):
+                logger.info("[%d/%d] Skipping existing ISBN: %s", idx, total, isbn)
+                skipped += 1
+                continue
+
+        logger.info("[%d/%d] Fetching ISBN: %s", idx, total, isbn)
         try:
             book = orch.fetch_book(isbn)
             d = asdict(book)
             results.append(d)
             print(json.dumps(d, ensure_ascii=False, default=str, indent=2))
+            succeeded += 1
         except Exception as exc:
-            logger.error("Failed to fetch %s: %s", isbn, exc)
+            logger.error("[%d/%d] Failed to fetch %s: %s", idx, total, isbn, exc)
+            failed += 1
+
+    # Write output file if requested
+    if args.output:
+        out_path = pathlib.Path(args.output)
+        out_path.write_text(
+            json.dumps(results, ensure_ascii=False, default=str, indent=2),
+            encoding="utf-8",
+        )
+        logger.info("Results written to %s", args.output)
+
+    # Batch summary
+    if total > 1:
+        logger.info(
+            "Batch complete: %d succeeded, %d failed, %d skipped (total: %d)",
+            succeeded, failed, skipped, total,
+        )
 
     return results
 
@@ -83,6 +127,8 @@ def cmd_show(args):
 
 
 def main():
+    _bootstrap_env()
+
     parser = argparse.ArgumentParser(
         description="Thai ISBN DB — fetch and store Thai book metadata"
     )
@@ -94,6 +140,14 @@ def main():
     p_fetch.add_argument("--batch", metavar="FILE", help="Text file with one ISBN per line")
     p_fetch.add_argument(
         "--no-db", action="store_true", help="Skip MongoDB persistence"
+    )
+    p_fetch.add_argument(
+        "--skip-existing", action="store_true",
+        help="Skip ISBNs that already have a record in MongoDB",
+    )
+    p_fetch.add_argument(
+        "--output", metavar="FILE",
+        help="Write all fetched results to this JSON file",
     )
 
     # show

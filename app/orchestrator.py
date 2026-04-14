@@ -46,12 +46,32 @@ class Orchestrator:
     # Public API
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _validate_isbn(isbn: str) -> None:
+        """
+        Raise ValueError if *isbn* is not a valid ISBN-13.
+        Accepts hyphenated or plain digit input.
+        """
+        digits = IsbnFormatter.strip(isbn)
+        if not digits.isdigit() or len(digits) != 13:
+            raise ValueError(
+                f"Invalid ISBN: {isbn!r} — must be 13 digits (hyphens allowed)"
+            )
+        total = sum(
+            int(d) * (1 if i % 2 == 0 else 3)
+            for i, d in enumerate(digits)
+        )
+        if total % 10 != 0:
+            raise ValueError(f"Invalid ISBN-13 check digit in: {isbn!r}")
+
     def fetch_book(self, isbn: str) -> BookDocument:
         """
         Fetch, merge, persist, and return a BookDocument for *isbn*.
 
-        Never raises — errors from individual sources are logged and skipped.
+        Raises ValueError for malformed ISBNs.
+        Errors from individual sources are logged and skipped.
         """
+        self._validate_isbn(isbn)
         hyphenated = IsbnFormatter.format(isbn)
         digits = IsbnFormatter.strip(isbn)
 

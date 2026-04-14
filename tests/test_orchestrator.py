@@ -29,7 +29,7 @@ class TestOrchestratorTextMetadata:
 
     def test_nlt_success_populates_text_fields(self):
         orch, *_ = self._make(nlt_return=make_nlt_meta())
-        book = orch.fetch_book("9786161842714")
+        book = orch.fetch_book("9786161842710")
         assert book.title == "NLT Title"
         assert book.author == "NLT Author"
         assert book.publisher == "NLT Pub"
@@ -38,13 +38,13 @@ class TestOrchestratorTextMetadata:
 
     def test_nlt_failure_produces_empty_metadata(self):
         orch, *_ = self._make(nlt_return=None)
-        book = orch.fetch_book("9786161842714")
+        book = orch.fetch_book("9786161842710")
         assert book.title is None
         assert book.source is None
 
     def test_nlt_empty_title_treated_as_failure(self):
         orch, *_ = self._make(nlt_return=NltBookMetadata(title=None, author=None))
-        book = orch.fetch_book("9786161842714")
+        book = orch.fetch_book("9786161842710")
         assert book.source is None
 
     def test_nlt_exception_is_caught(self):
@@ -53,8 +53,8 @@ class TestOrchestratorTextMetadata:
         naiin = MagicMock(); naiin.fetch_cover.return_value = None
         seed = MagicMock(); seed.fetch_cover.return_value = None
         orch = Orchestrator(nlt_client=nlt, naiin_client=naiin, seed_scraper=seed)
-        book = orch.fetch_book("9786161842714")
-        assert book.isbn == "9786161842714"  # still returns a document
+        book = orch.fetch_book("9786161842710")
+        assert book.isbn == "9786161842710"  # still returns a document
         assert book.title is None
 
 
@@ -67,7 +67,7 @@ class TestOrchestratorCover:
 
     def test_naiin_cover_used_when_available(self):
         orch, naiin, seed = self._make(naiin_return="https://naiin.com/cover.jpg")
-        book = orch.fetch_book("9786161842714")
+        book = orch.fetch_book("9786161842710")
         assert book.cover_url == "https://naiin.com/cover.jpg"
         assert book.cover_source == "naiin"
         seed.fetch_cover.assert_not_called()
@@ -76,13 +76,13 @@ class TestOrchestratorCover:
         orch, naiin, seed = self._make(
             naiin_return=None, seed_return="https://se-ed.com/cover.jpg"
         )
-        book = orch.fetch_book("9786161842714")
+        book = orch.fetch_book("9786161842710")
         assert book.cover_url == "https://se-ed.com/cover.jpg"
         assert book.cover_source == "seed"
 
     def test_no_cover_when_both_fail(self):
         orch, *_ = self._make(naiin_return=None, seed_return=None)
-        book = orch.fetch_book("9786161842714")
+        book = orch.fetch_book("9786161842710")
         assert book.cover_url is None
         assert book.cover_source is None
 
@@ -91,7 +91,7 @@ class TestOrchestratorCover:
         naiin = MagicMock(); naiin.fetch_cover.side_effect = Exception("timeout")
         seed = MagicMock(); seed.fetch_cover.return_value = "https://se-ed.com/fallback.jpg"
         orch = Orchestrator(nlt_client=nlt, naiin_client=naiin, seed_scraper=seed)
-        book = orch.fetch_book("9786161842714")
+        book = orch.fetch_book("9786161842710")
         assert book.cover_source == "seed"
 
 
@@ -104,13 +104,13 @@ class TestOrchestratorIsbn:
 
     def test_isbn_stored_as_digits(self):
         orch = self._make()
-        book = orch.fetch_book("9786161842714")
-        assert book.isbn == "9786161842714"
+        book = orch.fetch_book("9786161842710")
+        assert book.isbn == "9786161842710"
 
     def test_hyphenated_isbn_input_stripped_to_digits(self):
         orch = self._make()
-        book = orch.fetch_book("978-616-18-4271-4")
-        assert book.isbn == "9786161842714"
+        book = orch.fetch_book("978-616-18-4271-0")
+        assert book.isbn == "9786161842710"
 
 
 class TestOrchestratorPersistence:
@@ -123,7 +123,7 @@ class TestOrchestratorPersistence:
             nlt_client=nlt, naiin_client=naiin, seed_scraper=seed,
             db_collection=collection,
         )
-        orch.fetch_book("9786161842714")
+        orch.fetch_book("9786161842710")
         collection.replace_one.assert_called_once()
         call_args = collection.replace_one.call_args
         assert call_args[1]["upsert"] is True
@@ -134,5 +134,5 @@ class TestOrchestratorPersistence:
         seed = MagicMock(); seed.fetch_cover.return_value = None
         orch = Orchestrator(nlt_client=nlt, naiin_client=naiin, seed_scraper=seed)
         # Should not raise
-        book = orch.fetch_book("9786161842714")
+        book = orch.fetch_book("9786161842710")
         assert book is not None
