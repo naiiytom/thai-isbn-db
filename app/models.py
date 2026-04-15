@@ -1,8 +1,8 @@
 """
 Book document schema for MongoDB.
 
-The document is stored in the `books` collection keyed by the hyphenated
-ISBN-13 string (e.g. "978-616-18-4271-4").
+The document is stored in the `books` collection keyed by the raw ISBN-13
+digit string (e.g. "9786161842714", no hyphens).
 """
 
 from dataclasses import dataclass, field, asdict
@@ -12,7 +12,7 @@ from typing import Optional
 
 @dataclass
 class BookDocument:
-    isbn: str                          # hyphenated ISBN-13 (primary key / _id)
+    isbn: str                          # raw 13-digit ISBN string, no hyphens (primary key / _id)
     title: Optional[str] = None
     author: Optional[str] = None
     publisher: Optional[str] = None

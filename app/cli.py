@@ -17,6 +17,7 @@ import pathlib
 import shutil
 import sys
 from dataclasses import asdict
+from datetime import datetime, timezone
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,6 +46,77 @@ def _get_collection():
         return None
 
 
+# ---------------------------------------------------------------------------
+# JSON output helpers
+# ---------------------------------------------------------------------------
+
+def _load_existing_isbns(output_dir: pathlib.Path, source: str) -> set:
+    """
+    Return the set of ISBN strings already stored in ``{source}_*.json``
+    files inside *output_dir*.  Unreadable files are skipped with a warning.
+    """
+    existing: set = set()
+    for fp in sorted(output_dir.glob(f"{source}_*.json")):
+        try:
+            data = json.loads(fp.read_text(encoding="utf-8"))
+            if isinstance(data, list):
+                for book in data:
+                    if isbn := book.get("isbn"):
+                        existing.add(isbn)
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Skipping unreadable existing file %s: %s", fp, exc)
+    return existing
+
+
+def _write_source_json_files(
+    results: list, output_dir: pathlib.Path, timestamp: str
+) -> None:
+    """
+    Save *results* to ``{source}_{timestamp}.json`` files, grouping by the
+    ``source`` field of each book record (books with ``source=None`` land in
+    ``unknown_{timestamp}.json``).
+
+    Before writing, existing files matching ``{source}_*.json`` in
+    *output_dir* are scanned for duplicate ISBNs so that no ISBN is written
+    more than once across all runs.
+    """
+    # Group by source key
+    groups: dict[str, list] = {}
+    for book in results:
+        key = book.get("source") or "unknown"
+        groups.setdefault(key, []).append(book)
+
+    for source_key, books in groups.items():
+        existing_isbns = _load_existing_isbns(output_dir, source_key)
+        new_books = [b for b in books if b.get("isbn") not in existing_isbns]
+
+        duplicates = len(books) - len(new_books)
+        if duplicates:
+            logger.info(
+                "Skipped %d duplicate ISBN(s) for source=%s (already in previous files)",
+                duplicates, source_key,
+            )
+
+        if not new_books:
+            logger.info(
+                "No new books for source=%s — nothing to write", source_key
+            )
+            continue
+
+        out_file = output_dir / f"{source_key}_{timestamp}.json"
+        out_file.write_text(
+            json.dumps(new_books, ensure_ascii=False, default=str, indent=2),
+            encoding="utf-8",
+        )
+        logger.info(
+            "Wrote %d new book(s) to %s", len(new_books), out_file
+        )
+
+
+# ---------------------------------------------------------------------------
+# Commands
+# ---------------------------------------------------------------------------
+
 def cmd_fetch(args):
     from app.orchestrator import Orchestrator
     from app.utils.isbn_formatter import IsbnFormatter
@@ -69,6 +141,9 @@ def cmd_fetch(args):
     skipped = 0
     results = []
 
+    # Fixed timestamp for this entire run (shared across all output files)
+    run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
     for idx, isbn in enumerate(isbns, start=1):
         # --skip-existing: check MongoDB before fetching
         if args.skip_existing and collection is not None:
@@ -89,14 +164,17 @@ def cmd_fetch(args):
             logger.error("[%d/%d] Failed to fetch %s: %s", idx, total, isbn, exc)
             failed += 1
 
-    # Write output file if requested
-    if args.output:
-        out_path = pathlib.Path(args.output)
-        out_path.write_text(
-            json.dumps(results, ensure_ascii=False, default=str, indent=2),
-            encoding="utf-8",
-        )
-        logger.info("Results written to %s", args.output)
+    # Write JSON output files
+    if results:
+        if args.output:
+            # Explicit file path: write all results to that file with deduplication
+            out_path = pathlib.Path(args.output)
+            _write_source_json_files(results, out_path.parent, run_timestamp)
+        else:
+            # Auto-naming: {source}_{timestamp}.json inside --output-dir
+            out_dir = pathlib.Path(args.output_dir)
+            out_dir.mkdir(parents=True, exist_ok=True)
+            _write_source_json_files(results, out_dir, run_timestamp)
 
     # Batch summary
     if total > 1:
@@ -147,7 +225,18 @@ def main():
     )
     p_fetch.add_argument(
         "--output", metavar="FILE",
-        help="Write all fetched results to this JSON file",
+        help=(
+            "Override output directory: results go into the parent directory of FILE "
+            "using auto-named {source}_{timestamp}.json files. "
+            "If omitted, files are written to --output-dir."
+        ),
+    )
+    p_fetch.add_argument(
+        "--output-dir", metavar="DIR", default=".",
+        help=(
+            "Directory where {source}_{timestamp}.json files are saved "
+            "(default: current directory). Ignored when --output is given."
+        ),
     )
 
     # show
