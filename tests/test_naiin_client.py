@@ -1,5 +1,5 @@
-import responses as resp_mock
 import pytest
+from unittest.mock import patch
 from app.clients.naiin_client import NaiinClient, NAIIN_SEARCH_URL, NAIIN_BASE_URL
 
 # ---------------------------------------------------------------------------
@@ -106,56 +106,42 @@ class TestNaiinClientFetch:
     def setup_method(self):
         self.client = NaiinClient(rate_limit_delay=0)
 
-    @resp_mock.activate
     def test_fast_path_og_image_on_search_page(self):
-        resp_mock.add(resp_mock.GET, NAIIN_SEARCH_URL, body=SEARCH_HTML_WITH_OG, status=200)
-        result = self.client.fetch("9786161842714")
+        with patch.object(self.client, "_get", return_value=SEARCH_HTML_WITH_OG) as mock_get:
+            result = self.client.fetch("9786161842714")
         assert result is not None
         assert result.cover_url == "https://cdn.naiin.com/covers/9786161842714.jpg"
         assert result.title == "หนังสือทดสอบ"
-        assert len(resp_mock.calls) == 1  # only search page fetched
+        assert mock_get.call_count == 1  # only search page fetched
 
-    @resp_mock.activate
     def test_slow_path_follows_product_link(self):
-        resp_mock.add(resp_mock.GET, NAIIN_SEARCH_URL, body=SEARCH_HTML_WITH_LINK, status=200)
-        resp_mock.add(
-            resp_mock.GET,
-            f"{NAIIN_BASE_URL}/product/thai-book-9786161842714",
-            body=DETAIL_HTML,
-            status=200,
-        )
-        result = self.client.fetch("9786161842714")
+        with patch.object(
+            self.client, "_get", side_effect=[SEARCH_HTML_WITH_LINK, DETAIL_HTML]
+        ) as mock_get:
+            result = self.client.fetch("9786161842714")
         assert result is not None
         assert result.cover_url == "https://cdn.naiin.com/detail/cover.jpg"
-        assert len(resp_mock.calls) == 2
+        assert mock_get.call_count == 2
 
-    @resp_mock.activate
     def test_fetch_cover_returns_url_string(self):
-        resp_mock.add(resp_mock.GET, NAIIN_SEARCH_URL, body=SEARCH_HTML_WITH_OG, status=200)
-        url = self.client.fetch_cover("9786161842714")
+        with patch.object(self.client, "_get", return_value=SEARCH_HTML_WITH_OG):
+            url = self.client.fetch_cover("9786161842714")
         assert url == "https://cdn.naiin.com/covers/9786161842714.jpg"
 
-    @resp_mock.activate
     def test_returns_none_on_http_403(self):
-        resp_mock.add(resp_mock.GET, NAIIN_SEARCH_URL, status=403)
-        result = self.client.fetch("9786161842714")
+        with patch.object(self.client, "_get", return_value=None):
+            result = self.client.fetch("9786161842714")
         assert result is None
 
-    @resp_mock.activate
     def test_returns_none_when_no_image_anywhere(self):
-        resp_mock.add(resp_mock.GET, NAIIN_SEARCH_URL, body=NO_IMAGE_HTML, status=200)
-        result = self.client.fetch("9786161842714")
+        with patch.object(self.client, "_get", return_value=NO_IMAGE_HTML):
+            result = self.client.fetch("9786161842714")
         assert result is None
 
-    @resp_mock.activate
     def test_returns_none_when_detail_page_also_missing_image(self):
-        resp_mock.add(resp_mock.GET, NAIIN_SEARCH_URL, body=SEARCH_HTML_WITH_LINK, status=200)
-        resp_mock.add(
-            resp_mock.GET,
-            f"{NAIIN_BASE_URL}/product/thai-book-9786161842714",
-            body=NO_IMAGE_HTML,
-            status=200,
-        )
-        result = self.client.fetch("9786161842714")
+        with patch.object(
+            self.client, "_get", side_effect=[SEARCH_HTML_WITH_LINK, NO_IMAGE_HTML]
+        ):
+            result = self.client.fetch("9786161842714")
         assert result is not None
         assert result.cover_url is None

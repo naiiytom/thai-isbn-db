@@ -1,5 +1,5 @@
-import responses as resp_mock
 import pytest
+from unittest.mock import patch
 from app.clients.nlt_client import NltClient, NLT_SEARCH_URL, NLT_DETAIL_URL
 
 # ---------------------------------------------------------------------------
@@ -118,43 +118,22 @@ class TestNltClientFetch:
     def setup_method(self):
         self.client = NltClient(rate_limit_delay=0)
 
-    @resp_mock.activate
     def test_fetch_returns_metadata_on_success(self):
-        resp_mock.add(
-            resp_mock.GET,
-            NLT_SEARCH_URL,
-            body=SEARCH_HTML_WITH_LINK,
-            status=200,
-        )
-        resp_mock.add(
-            resp_mock.GET,
-            f"{NLT_DETAIL_URL}/42",
-            body=DETAIL_HTML,
-            status=200,
-        )
-        meta = self.client.fetch("9786161842714")
+        with patch.object(
+            self.client, "_get", side_effect=[SEARCH_HTML_WITH_LINK, DETAIL_HTML]
+        ):
+            meta = self.client.fetch("9786161842714")
         assert meta is not None
         assert meta.title == "หนังสือทดสอบ"
         assert meta.author == "ผู้เขียนทดสอบ"
         assert meta.page_count == 320
 
-    @resp_mock.activate
     def test_fetch_returns_none_when_search_fails(self):
-        resp_mock.add(
-            resp_mock.GET,
-            NLT_SEARCH_URL,
-            body=SEARCH_HTML_NO_MATCH,
-            status=200,
-        )
-        meta = self.client.fetch("9786161842714")
+        with patch.object(self.client, "_get", return_value=SEARCH_HTML_NO_MATCH):
+            meta = self.client.fetch("9786161842714")
         assert meta is None
 
-    @resp_mock.activate
     def test_fetch_returns_none_on_http_error(self):
-        resp_mock.add(
-            resp_mock.GET,
-            NLT_SEARCH_URL,
-            status=403,
-        )
-        meta = self.client.fetch("9786161842714")
+        with patch.object(self.client, "_get", return_value=None):
+            meta = self.client.fetch("9786161842714")
         assert meta is None
