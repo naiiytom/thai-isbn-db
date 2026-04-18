@@ -19,11 +19,11 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
-import requests
 from bs4 import BeautifulSoup
+from crawl4ai import BrowserConfig, CrawlerRunConfig, CacheMode
 
 from app.config import REQUEST_TIMEOUT, REQUEST_RETRIES, RATE_LIMIT_DELAY
-from app.utils.http_client import RobustHttpMixin
+from app.utils.http_client import RobustHttpMixin, _AsyncCrawlerThread
 from app.utils.isbn_formatter import IsbnFormatter
 
 logger = logging.getLogger(__name__)
@@ -65,8 +65,17 @@ class NaiinClient(RobustHttpMixin):
         self.timeout = timeout
         self.retries = retries
         self.rate_limit_delay = rate_limit_delay
-        self.session = requests.Session()
-        self.session.headers.update(_HEADERS)
+        browser_config = BrowserConfig(
+            headless=True,
+            user_agent=_HEADERS["User-Agent"],
+            headers={k: v for k, v in _HEADERS.items() if k != "User-Agent"},
+        )
+        self._run_config = CrawlerRunConfig(
+            page_timeout=self.timeout * 1000,
+            cache_mode=CacheMode.BYPASS,
+        )
+        self._crawler_thread = _AsyncCrawlerThread(browser_config)
+        self._crawler_thread.start()
 
     # ------------------------------------------------------------------
     # Public API

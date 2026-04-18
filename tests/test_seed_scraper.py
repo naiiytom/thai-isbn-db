@@ -1,5 +1,5 @@
-import responses as resp_mock
 import pytest
+from unittest.mock import patch
 from app.clients.seed_scraper import SeedScraper, SEED_SEARCH_URL
 
 
@@ -56,25 +56,17 @@ class TestSeedScraperFetchCover:
     def setup_method(self):
         self.scraper = SeedScraper(rate_limit_delay=0)
 
-    @resp_mock.activate
     def test_fetch_cover_success(self):
-        resp_mock.add(
-            resp_mock.GET,
-            SEED_SEARCH_URL,
-            body=OG_IMAGE_HTML,
-            status=200,
-        )
-        url = self.scraper.fetch_cover("9786161842714")
+        with patch.object(self.scraper, "_get", return_value=OG_IMAGE_HTML):
+            url = self.scraper.fetch_cover("9786161842714")
         assert url == "https://www.se-ed.com/covers/9786161842714.jpg"
 
-    @resp_mock.activate
     def test_fetch_cover_returns_none_on_404(self):
-        resp_mock.add(resp_mock.GET, SEED_SEARCH_URL, status=404)
-        url = self.scraper.fetch_cover("9786161842714")
+        with patch.object(self.scraper, "_get", return_value=None):
+            url = self.scraper.fetch_cover("9786161842714")
         assert url is None
 
-    @resp_mock.activate
     def test_fetch_cover_returns_none_when_no_image_in_page(self):
-        resp_mock.add(resp_mock.GET, SEED_SEARCH_URL, body=NO_IMAGE_HTML, status=200)
-        url = self.scraper.fetch_cover("9786161842714")
+        with patch.object(self.scraper, "_get", return_value=NO_IMAGE_HTML):
+            url = self.scraper.fetch_cover("9786161842714")
         assert url is None

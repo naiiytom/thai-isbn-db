@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Fetch and store Thai book metadata by ISBN"
 requires-python = ">=3.10"
 dependencies = [
-    "requests>=2.31.0",
+    "crawl4ai>=0.8.0",
     "beautifulsoup4>=4.12.0",
     "lxml>=4.9.0",
     "pymongo>=4.6.0",
@@ -22,7 +22,6 @@ thai-isbn = "app.cli:main"
 [dependency-groups]
 dev = [
     "pytest>=7.4.0",
-    "responses>=0.23.0",
     "mongomock>=4.1.0",
 ]
 
