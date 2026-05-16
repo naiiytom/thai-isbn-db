@@ -42,6 +42,20 @@ DETAIL_HTML_TABLE = """
 </body></html>
 """
 
+DETAIL_HTML_EXTENDED = """
+<html><body>
+<dl>
+  <dt>ชื่อเรื่อง</dt><dd>นิยายทดสอบ</dd>
+  <dt>ผู้แต่ง</dt><dd>นักเขียนทดสอบ</dd>
+  <dt>สำนักพิมพ์</dt><dd>สำนักพิมพ์ทดสอบ</dd>
+  <dt>จำนวนหน้า</dt><dd>128 หน้า</dd>
+  <dt>ปีที่พิมพ์</dt><dd>2024</dd>
+  <dt>หมวดหมู่</dt><dd>นิยาย</dd>
+  <dt>เลขมาตรฐาน</dt><dd>978-616-18-4271-0</dd>
+</dl>
+</body></html>
+"""
+
 
 # ---------------------------------------------------------------------------
 # Tests: _parse_running_number
@@ -108,6 +122,23 @@ class TestParseDetailTable:
     def test_page_count_from_table(self):
         meta = self.client._parse_detail(DETAIL_HTML_TABLE)
         assert meta.page_count == 256
+
+
+# ---------------------------------------------------------------------------
+# Tests: _parse_detail (extended fields)
+# ---------------------------------------------------------------------------
+
+class TestParseDetailExtendedFields:
+    def setup_method(self):
+        self.client = NltClient()
+
+    def test_publication_year(self):
+        meta = self.client._parse_detail(DETAIL_HTML_EXTENDED)
+        assert meta.publication_year == 2024
+
+    def test_subject(self):
+        meta = self.client._parse_detail(DETAIL_HTML_EXTENDED)
+        assert meta.subject == "นิยาย"
 
 
 # ---------------------------------------------------------------------------

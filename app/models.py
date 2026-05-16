@@ -21,6 +21,8 @@ class BookDocument:
     cover_url: Optional[str] = None
     source: Optional[str] = None         # "nlt", "bulk", etc.
     cover_source: Optional[str] = None   # "naiin", "seed", etc.
+    publication_year: Optional[int] = None
+    subject: Optional[str] = None
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     updated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 

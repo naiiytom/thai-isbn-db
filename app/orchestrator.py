@@ -78,10 +78,12 @@ class Orchestrator:
         # 1. Text metadata
         book = self._fetch_text_metadata(hyphenated, digits)
 
-        # 2. Cover image
-        cover_url, cover_source = self._fetch_cover(digits)
+        # 2. Cover image and synopsis
+        cover_url, cover_source, synopsis = self._fetch_cover_and_synopsis(digits)
         book.cover_url = cover_url
         book.cover_source = cover_source
+        if synopsis and not book.synopsis:
+            book.synopsis = synopsis
 
         # 3. Persist
         self._save(book)
@@ -110,6 +112,8 @@ class Orchestrator:
                 author=nlt_meta.author,
                 publisher=nlt_meta.publisher,
                 page_count=nlt_meta.page_count,
+                publication_year=nlt_meta.publication_year,
+                subject=nlt_meta.subject,
                 source="nlt",
             )
 
@@ -120,20 +124,22 @@ class Orchestrator:
         return BookDocument(isbn=digits, source=None)
 
     # ------------------------------------------------------------------
-    # Step 2: cover image
+    # Step 2: cover image and synopsis
     # ------------------------------------------------------------------
 
-    def _fetch_cover(self, digits: str) -> tuple[Optional[str], Optional[str]]:
+    def _fetch_cover_and_synopsis(
+        self, digits: str
+    ) -> tuple[Optional[str], Optional[str], Optional[str]]:
         # --- Naiin (primary) ---
         try:
-            url = self.naiin.fetch_cover(digits)
+            naiin_data = self.naiin.fetch(digits)
         except Exception as exc:
             logger.error("NaiinClient raised unexpectedly: %s", exc)
-            url = None
+            naiin_data = None
 
-        if url:
+        if naiin_data and naiin_data.cover_url:
             logger.info("Cover sourced from Naiin for ISBN %s", digits)
-            return url, "naiin"
+            return naiin_data.cover_url, "naiin", naiin_data.description
 
         # --- SE-ED (fallback) ---
         try:
@@ -144,10 +150,10 @@ class Orchestrator:
 
         if url:
             logger.info("Cover sourced from SE-ED for ISBN %s", digits)
-            return url, "seed"
+            return url, "seed", None
 
         logger.info("No cover found for ISBN %s", digits)
-        return None, None
+        return None, None, None
 
     # ------------------------------------------------------------------
     # Step 3: persistence
