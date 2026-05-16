@@ -16,12 +16,18 @@ def make_nlt_meta(**kwargs):
     return NltBookMetadata(**defaults)
 
 
+def _naiin_mock(cover_url=None, description=None):
+    """Return a MagicMock for NaiinClient whose .fetch() returns NaiinBookData."""
+    naiin = MagicMock()
+    naiin.fetch.return_value = NaiinBookData(cover_url=cover_url, description=description)
+    return naiin
+
+
 class TestOrchestratorTextMetadata:
-    def _make(self, nlt_return=None, naiin_return=None, seed_return=None):
+    def _make(self, nlt_return=None, naiin_cover=None, seed_return=None):
         nlt = MagicMock()
         nlt.fetch.return_value = nlt_return
-        naiin = MagicMock()
-        naiin.fetch_cover.return_value = naiin_return
+        naiin = _naiin_mock(cover_url=naiin_cover)
         seed = MagicMock()
         seed.fetch_cover.return_value = seed_return
         orch = Orchestrator(nlt_client=nlt, naiin_client=naiin, seed_scraper=seed)
@@ -50,7 +56,7 @@ class TestOrchestratorTextMetadata:
     def test_nlt_exception_is_caught(self):
         nlt = MagicMock()
         nlt.fetch.side_effect = Exception("network timeout")
-        naiin = MagicMock(); naiin.fetch_cover.return_value = None
+        naiin = _naiin_mock()
         seed = MagicMock(); seed.fetch_cover.return_value = None
         orch = Orchestrator(nlt_client=nlt, naiin_client=naiin, seed_scraper=seed)
         book = orch.fetch_book("9786161842710")
@@ -59,14 +65,14 @@ class TestOrchestratorTextMetadata:
 
 
 class TestOrchestratorCover:
-    def _make(self, nlt_return=None, naiin_return=None, seed_return=None):
+    def _make(self, nlt_return=None, naiin_cover=None, seed_return=None):
         nlt = MagicMock(); nlt.fetch.return_value = nlt_return
-        naiin = MagicMock(); naiin.fetch_cover.return_value = naiin_return
+        naiin = _naiin_mock(cover_url=naiin_cover)
         seed = MagicMock(); seed.fetch_cover.return_value = seed_return
         return Orchestrator(nlt_client=nlt, naiin_client=naiin, seed_scraper=seed), naiin, seed
 
     def test_naiin_cover_used_when_available(self):
-        orch, naiin, seed = self._make(naiin_return="https://naiin.com/cover.jpg")
+        orch, naiin, seed = self._make(naiin_cover="https://naiin.com/cover.jpg")
         book = orch.fetch_book("9786161842710")
         assert book.cover_url == "https://naiin.com/cover.jpg"
         assert book.cover_source == "naiin"
@@ -74,31 +80,57 @@ class TestOrchestratorCover:
 
     def test_seed_cover_used_as_fallback(self):
         orch, naiin, seed = self._make(
-            naiin_return=None, seed_return="https://se-ed.com/cover.jpg"
+            naiin_cover=None, seed_return="https://se-ed.com/cover.jpg"
         )
         book = orch.fetch_book("9786161842710")
         assert book.cover_url == "https://se-ed.com/cover.jpg"
         assert book.cover_source == "seed"
 
     def test_no_cover_when_both_fail(self):
-        orch, *_ = self._make(naiin_return=None, seed_return=None)
+        orch, *_ = self._make(naiin_cover=None, seed_return=None)
         book = orch.fetch_book("9786161842710")
         assert book.cover_url is None
         assert book.cover_source is None
 
     def test_naiin_exception_falls_through_to_seed(self):
         nlt = MagicMock(); nlt.fetch.return_value = None
-        naiin = MagicMock(); naiin.fetch_cover.side_effect = Exception("timeout")
+        naiin = MagicMock(); naiin.fetch.side_effect = Exception("timeout")
         seed = MagicMock(); seed.fetch_cover.return_value = "https://se-ed.com/fallback.jpg"
         orch = Orchestrator(nlt_client=nlt, naiin_client=naiin, seed_scraper=seed)
         book = orch.fetch_book("9786161842710")
         assert book.cover_source == "seed"
 
 
+class TestOrchestratorSynopsis:
+    def test_synopsis_populated_from_naiin(self):
+        nlt = MagicMock(); nlt.fetch.return_value = make_nlt_meta()
+        naiin = _naiin_mock(cover_url="https://naiin.com/cover.jpg", description="A great book")
+        seed = MagicMock()
+        orch = Orchestrator(nlt_client=nlt, naiin_client=naiin, seed_scraper=seed)
+        book = orch.fetch_book("9786161842710")
+        assert book.synopsis == "A great book"
+
+    def test_synopsis_none_when_naiin_returns_no_description(self):
+        nlt = MagicMock(); nlt.fetch.return_value = None
+        naiin = _naiin_mock(cover_url="https://naiin.com/cover.jpg", description=None)
+        seed = MagicMock()
+        orch = Orchestrator(nlt_client=nlt, naiin_client=naiin, seed_scraper=seed)
+        book = orch.fetch_book("9786161842710")
+        assert book.synopsis is None
+
+    def test_synopsis_none_when_seed_used(self):
+        nlt = MagicMock(); nlt.fetch.return_value = None
+        naiin = _naiin_mock(cover_url=None)
+        seed = MagicMock(); seed.fetch_cover.return_value = "https://se-ed.com/cover.jpg"
+        orch = Orchestrator(nlt_client=nlt, naiin_client=naiin, seed_scraper=seed)
+        book = orch.fetch_book("9786161842710")
+        assert book.synopsis is None
+
+
 class TestOrchestratorIsbn:
     def _make(self):
         nlt = MagicMock(); nlt.fetch.return_value = None
-        naiin = MagicMock(); naiin.fetch_cover.return_value = None
+        naiin = _naiin_mock()
         seed = MagicMock(); seed.fetch_cover.return_value = None
         return Orchestrator(nlt_client=nlt, naiin_client=naiin, seed_scraper=seed)
 
@@ -116,7 +148,7 @@ class TestOrchestratorIsbn:
 class TestOrchestratorPersistence:
     def test_saves_to_mongo_collection(self):
         nlt = MagicMock(); nlt.fetch.return_value = make_nlt_meta()
-        naiin = MagicMock(); naiin.fetch_cover.return_value = "https://naiin.com/c.jpg"
+        naiin = _naiin_mock(cover_url="https://naiin.com/c.jpg")
         seed = MagicMock()
         collection = MagicMock()
         orch = Orchestrator(
@@ -130,7 +162,7 @@ class TestOrchestratorPersistence:
 
     def test_skips_persistence_when_no_collection(self):
         nlt = MagicMock(); nlt.fetch.return_value = None
-        naiin = MagicMock(); naiin.fetch_cover.return_value = None
+        naiin = _naiin_mock()
         seed = MagicMock(); seed.fetch_cover.return_value = None
         orch = Orchestrator(nlt_client=nlt, naiin_client=naiin, seed_scraper=seed)
         # Should not raise

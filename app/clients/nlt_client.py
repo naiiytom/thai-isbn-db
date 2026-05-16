@@ -49,6 +49,8 @@ class NltBookMetadata:
     page_count: Optional[int] = None
     isbn: Optional[str] = None
     detail_url: Optional[str] = None
+    publication_year: Optional[int] = None
+    subject: Optional[str] = None
 
 
 class NltClient(RobustHttpMixin):
@@ -232,6 +234,12 @@ class NltClient(RobustHttpMixin):
                 cleaned = re.sub(r"[^\d\-]", "", value).strip("-")
                 if cleaned:
                     meta.isbn = cleaned
+            elif "ปีที่พิมพ์" in label or "year" in lc:
+                digits = re.sub(r"\D", "", value)
+                if digits:
+                    meta.publication_year = int(digits[:4])
+            elif "หมวดหมู่" in label or "subject" in lc:
+                meta.subject = value or meta.subject
 
         return meta
 
